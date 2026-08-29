@@ -1,0 +1,36 @@
+# Обратный прокси KTTF.
+#
+# Единственная точка входа: всё, что приходит снаружи, проходит здесь.
+# Приложения своих портов наружу не открывают.
+
+{$KTTF_DOMAIN:localhost} {
+	# API под префиксом /api — фронт и бэк живут на одном домене,
+	# поэтому CORS не нужен вовсе, а куки работают без ухищрений.
+	handle /api/* {
+		reverse_proxy kttf-api:3000
+	}
+
+	# Вебсокеты второго экрана и живого обновления консоли (ТС 7.7)
+	handle /ws/* {
+		reverse_proxy kttf-api:3000
+	}
+
+	# Всё остальное — статика фронта
+	handle {
+		reverse_proxy kttf-web:80
+	}
+
+	encode gzip zstd
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}
