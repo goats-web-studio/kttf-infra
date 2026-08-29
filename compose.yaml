@@ -4,7 +4,11 @@
 # наблюдаемость — профилем `observability`. Так `docker compose up` работает
 # и сейчас, когда приложений ещё нет, и позже, когда они появятся.
 #
-# Все сервисы в одной сети kttf-net и общаются по именам контейнеров.
+# Имя сервиса совпадает с именем контейнера: одна сущность — одно имя
+# везде, включая внутренний DNS и интерфейс Docker Desktop. Иначе на каждый
+# сервис приходится по два имени, и в списке контейнеров видно не то.
+#
+# Все сервисы в одной сети kttf-net и общаются по этим именам.
 # Наружу открыто только то, что нужно с хоста: прокси и порты БД для миграций
 # и отладки. Порты смещены, чтобы не конфликтовать с тем, что уже стоит
 # на машине разработчика.
@@ -12,7 +16,7 @@
 name: kttf
 
 services:
-  postgres:
+  kttf-postgres:
     image: postgres:17-alpine
     container_name: kttf-postgres
     restart: unless-stopped
@@ -36,7 +40,7 @@ services:
       retries: 10
       start_period: 15s
 
-  redis:
+  kttf-redis:
     image: redis:7-alpine
     container_name: kttf-redis
     restart: unless-stopped
@@ -54,7 +58,7 @@ services:
       timeout: 3s
       retries: 10
 
-  minio:
+  kttf-minio:
     image: minio/minio:latest
     container_name: kttf-minio
     restart: unless-stopped
@@ -81,7 +85,7 @@ services:
   # Пока kttf-back и kttf-front пусты, эти сервисы не собираются.
   # Убрать `profiles`, когда в них появятся приложения и Dockerfile.
 
-  api:
+  kttf-api:
     build:
       context: ../kttf-back
       dockerfile: Dockerfile
@@ -93,23 +97,23 @@ services:
       NODE_ENV: ${NODE_ENV:-production}
       # Внутри сети обращение идёт по имени сервиса и штатному порту,
       # смещённые порты хоста здесь ни при чём.
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
-      REDIS_URL: redis://redis:6379
-      S3_ENDPOINT: http://minio:9000
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@kttf-postgres:5432/${POSTGRES_DB}?schema=public
+      REDIS_URL: redis://kttf-redis:6379
+      S3_ENDPOINT: http://kttf-minio:9000
       S3_ACCESS_KEY: ${MINIO_ROOT_USER}
       S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       PORT: 3000
     networks:
       - kttf-net
     depends_on:
-      postgres:
+      kttf-postgres:
         condition: service_healthy
-      redis:
+      kttf-redis:
         condition: service_healthy
-      minio:
+      kttf-minio:
         condition: service_healthy
 
-  web:
+  kttf-web:
     build:
       context: ../kttf-front
       dockerfile: Dockerfile
@@ -120,7 +124,7 @@ services:
     networks:
       - kttf-net
 
-  proxy:
+  kttf-proxy:
     image: caddy:2-alpine
     container_name: kttf-proxy
     restart: unless-stopped
@@ -137,14 +141,14 @@ services:
     networks:
       - kttf-net
     depends_on:
-      - api
-      - web
+      - kttf-api
+      - kttf-web
 
   # ---- Наблюдаемость. Профиль `observability` ----
   #
   # Локально не нужна и только ест память, в проде обязательна (ТС 8.5).
 
-  prometheus:
+  kttf-prometheus:
     image: prom/prometheus:latest
     container_name: kttf-prometheus
     restart: unless-stopped
@@ -155,7 +159,7 @@ services:
     networks:
       - kttf-net
 
-  grafana:
+  kttf-grafana:
     image: grafana/grafana:latest
     container_name: kttf-grafana
     restart: unless-stopped
