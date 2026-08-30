@@ -7,7 +7,8 @@
 ## Быстрый старт
 
 ```
-cp .env.example .env          # заменить пароли
+cp .env.example .env          # пароли MinIO и Grafana заменить, Postgres —
+                              # только вместе с kttf-back/.env.example
 docker compose up -d          # поднимет postgres, redis, minio
 docker compose ps             # дождаться healthy у всех трёх
 ```
