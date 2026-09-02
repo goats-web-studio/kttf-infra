@@ -126,7 +126,6 @@ services:
       # так и задумано: неверное окружение видно при запуске, а не на
       # первом запросе.
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET не задан}
-      AUTH_CODE_SECRET: ${AUTH_CODE_SECRET:?AUTH_CODE_SECRET не задан}
       PORT: 3000
     networks:
       - kttf-net
