@@ -1,8 +1,8 @@
 # Стек KTTF.
 #
-# Инфраструктура поднимается по умолчанию, приложения — профилем `apps`,
-# наблюдаемость — профилем `observability`. Так `docker compose up` работает
-# и сейчас, когда приложений ещё нет, и позже, когда они появятся.
+# `docker compose up -d` поднимает продукт целиком: базу, кэш, хранилище
+# файлов, миграции, API, статику и прокси. Наблюдаемость остаётся за
+# профилем `observability` — локально она не нужна и только ест память.
 #
 # Имя сервиса совпадает с именем контейнера: одна сущность — одно имя
 # везде, включая внутренний DNS и интерфейс Docker Desktop. Иначе на каждый
@@ -80,20 +80,40 @@ services:
       retries: 10
       start_period: 10s
 
-  # ---- Приложения. Профиль `apps` ----
-  #
-  # Пока kttf-back и kttf-front пусты, эти сервисы не собираются.
-  # Убрать `profiles`, когда в них появятся приложения и Dockerfile.
+  # ---- Приложения ----
+
+  # Схему накатывает отдельный разовый контейнер, а не API при старте
+  # (ADR-030): при нескольких копиях приложения миграция обязана пройти
+  # ровно один раз, а её отказ — быть виден отдельно от отказа приложения.
+  kttf-migrate:
+    build:
+      context: ../kttf-back
+      dockerfile: Dockerfile
+      target: migrator
+    image: ghcr.io/goats-web-studio/kttf-migrate:${IMAGE_TAG:-local}
+    container_name: kttf-migrate
+    # Задача, а не служба: отработала — завершилась. Перезапуск означал бы
+    # бесконечный цикл миграции при первой же ошибке в ней.
+    restart: 'no'
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@kttf-postgres:5432/${POSTGRES_DB}?schema=public
+    networks:
+      - kttf-net
+    depends_on:
+      kttf-postgres:
+        condition: service_healthy
 
   kttf-api:
     build:
       context: ../kttf-back
       dockerfile: Dockerfile
+      target: runtime
     image: ghcr.io/goats-web-studio/kttf-api:${IMAGE_TAG:-local}
     container_name: kttf-api
     restart: unless-stopped
-    profiles: [apps]
     environment:
+      # При `production` приложение намеренно не поднимется, пока нет
+      # провайдера SMS: код входа уходит в лог, и это дыра (ADR-013, ОВ-9).
       NODE_ENV: ${NODE_ENV:-production}
       # Внутри сети обращение идёт по имени сервиса и штатному порту,
       # смещённые порты хоста здесь ни при чём.
@@ -102,12 +122,26 @@ services:
       S3_ENDPOINT: http://kttf-minio:9000
       S3_ACCESS_KEY: ${MINIO_ROOT_USER}
       S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      # Ключи подписи. Без них приложение падает на разборе окружения —
+      # так и задумано: неверное окружение видно при запуске, а не на
+      # первом запросе.
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET не задан}
+      AUTH_CODE_SECRET: ${AUTH_CODE_SECRET:?AUTH_CODE_SECRET не задан}
       PORT: 3000
     networks:
       - kttf-net
+    healthcheck:
+      test:
+        ['CMD', 'wget', '--spider', '--quiet', 'http://127.0.0.1:3000/api/v1/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     depends_on:
-      kttf-postgres:
-        condition: service_healthy
+      # Схема должна быть накатана до старта, иначе первый же запрос уйдёт
+      # в базу без таблиц.
+      kttf-migrate:
+        condition: service_completed_successfully
       kttf-redis:
         condition: service_healthy
       kttf-minio:
@@ -117,10 +151,10 @@ services:
     build:
       context: ../kttf-front
       dockerfile: Dockerfile
+      target: runtime
     image: ghcr.io/goats-web-studio/kttf-web:${IMAGE_TAG:-local}
     container_name: kttf-web
     restart: unless-stopped
-    profiles: [apps]
     networks:
       - kttf-net
 
@@ -128,7 +162,6 @@ services:
     image: caddy:2-alpine
     container_name: kttf-proxy
     restart: unless-stopped
-    profiles: [apps]
     ports:
       - '${HTTP_PORT:-80}:80'
       - '${HTTPS_PORT:-443}:443'
@@ -141,8 +174,10 @@ services:
     networks:
       - kttf-net
     depends_on:
-      - kttf-api
-      - kttf-web
+      kttf-api:
+        condition: service_healthy
+      kttf-web:
+        condition: service_started
 
   # ---- Наблюдаемость. Профиль `observability` ----
   #
