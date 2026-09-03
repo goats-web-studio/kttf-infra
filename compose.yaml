@@ -112,8 +112,6 @@ services:
     container_name: kttf-api
     restart: unless-stopped
     environment:
-      # При `production` приложение намеренно не поднимется, пока нет
-      # провайдера SMS: код входа уходит в лог, и это дыра (ADR-013, ОВ-9).
       NODE_ENV: ${NODE_ENV:-production}
       # Внутри сети обращение идёт по имени сервиса и штатному порту,
       # смещённые порты хоста здесь ни при чём.
