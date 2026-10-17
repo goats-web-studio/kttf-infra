@@ -59,7 +59,9 @@ services:
       retries: 10
 
   kttf-minio:
-    image: minio/minio:latest
+    # Docker Hub больше не раздаёт minio/minio: MinIO прекратил публикацию
+    # community-образов. Chainguard собирает тот же сервер из исходников.
+    image: cgr.dev/chainguard/minio:latest
     container_name: kttf-minio
     restart: unless-stopped
     command: server /data --console-address ':9001'
