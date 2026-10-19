@@ -26,15 +26,15 @@
 		X-Content-Type-Options nosniff
 		X-Frame-Options DENY
 		Referrer-Policy strict-origin-when-cross-origin
-		# Первая политика CSP (ADR-055). Сначала только отчётом в консоль
-		# браузера: политика касается всего сайта — консоли, экрана зала с
-		# SSE, service worker'а. Включается заменой на Content-Security-Policy
-		# после прохода всех экранов.
+		# Политика CSP (ADR-055). Включена 19.10.2026 после прохода всех экранов
+		# в режиме отчёта: публичная часть, кабинет, консоль с сетью и без, экран
+		# зала с SSE. Единственный отказ — проба Zod «можно ли исполнять строки»:
+		# получив отказ, Zod разбирает без этого ускорения.
 		#   style-src 'unsafe-inline' — MUI (emotion) вставляет стили тегом
 		#   img-src https: — логотипы клубов из прошлого внешними ссылками
 		#   font-src data: — Vite встраивает мелкие шрифты в CSS строкой
 		#   frame-src — видео YouTube по нажатию, без cookie (docs/09, MVP-2)
-		Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; frame-src https://www.youtube-nocookie.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; frame-src https://www.youtube-nocookie.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
 		-Server
 	}
 
