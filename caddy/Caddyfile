@@ -26,6 +26,14 @@
 		X-Content-Type-Options nosniff
 		X-Frame-Options DENY
 		Referrer-Policy strict-origin-when-cross-origin
+		# Первая политика CSP (ADR-055). Сначала только отчётом в консоль
+		# браузера: политика касается всего сайта — консоли, экрана зала с
+		# SSE, service worker'а. Включается заменой на Content-Security-Policy
+		# после прохода всех экранов.
+		#   style-src 'unsafe-inline' — MUI (emotion) вставляет стили тегом
+		#   img-src https: — логотипы клубов из прошлого внешними ссылками
+		#   frame-src — видео YouTube по нажатию, без cookie (docs/09, MVP-2)
+		Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; frame-src https://www.youtube-nocookie.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
 		-Server
 	}
 
