@@ -6,15 +6,67 @@
 
 ## Быстрый старт
 
+Нужны Git и Docker Desktop. Репозитории клонируются **рядом, в одну папку**:
+стек собирает образы из соседних `../kttf-back` и `../kttf-front`.
+
 ```
-cp .env.example .env          # пароли и ключи подписи заменить; пароль
+mkdir kttf && cd kttf
+git clone https://github.com/goats-web-studio/kttf-back.git
+git clone https://github.com/goats-web-studio/kttf-front.git
+git clone https://github.com/goats-web-studio/kttf-infra.git
+git clone https://github.com/goats-web-studio/kttf-shared.git   # документация и общий код,
+                                                                 # стеку не нужен
+
+cd kttf-infra
+cp .env.example .env          # локально можно оставить как есть; пароль
                               # Postgres — только вместе с kttf-back/.env.example
-docker compose up -d          # поднимет продукт целиком, включая схему
-docker compose ps             # дождаться healthy
+docker compose up -d --build  # первая сборка — минут 5–10
+docker compose ps             # дождаться healthy у kttf-api
 ```
 
 Открыть `https://localhost`. Сертификат Caddy выпускает сам и локально он
 самоподписанный — браузер об этом предупредит.
+
+Если порты 80 или 443 заняты, поменять `HTTP_PORT` / `HTTPS_PORT` в `.env`.
+
+### Демо-данные
+
+С `KTTF_DEMO_SEED=1` (так в `.env.example`) пустой стек при первом запуске
+заполняется снимком из `seed/`: клубы, игроки, тренеры, турниры с
+рейтингом, дуэли, форум, лента и каталог из 429 позиций. Делают это два
+разовых контейнера: `kttf-seed` — база, до миграций; `kttf-seed-media` — файлы
+в MinIO, до API. Непустую базу они не трогают, повторный `up` безопасен.
+
+| Логин | Пароль | Кто |
+|---|---|---|
+| `owner` | `Owner2026!` | владелец клуба «KTTF Тест» и администратор платформы |
+| `organizer` | `Organizer2026!` | организатор того же клуба |
+| `player` | `Player2026!` | обычный игрок |
+
+Ещё есть тренеры `coach1`…`coach6`. Пароль любому аккаунту задаёт
+`pnpm build && pnpm set-password <логин> <пароль>` в `kttf-back` (нужен
+его `.env` с `DATABASE_URL` на `localhost:5433`).
+
+**Фото каталога** в репозиторий не входят: это 60 МБ снимков с RTTF. Без них
+каталог открывается с заглушками. Чтобы были фото, распаковать архив
+`kttf-catalog-photos-*.tar.gz` в `seed/media/` (получится
+`seed/media/products/…`) и выполнить `docker compose up -d kttf-seed-media`.
+Папка под гитигнором.
+
+**Начать с чистого снимка** — `docker compose down -v`, затем снова
+`docker compose up -d`. Всё, что накоплено в локальной базе, пропадёт.
+
+**Обновить снимок** с текущей локальной базы:
+
+```
+docker exec kttf-postgres pg_dump -U kttf -d kttf --no-owner --no-privileges | gzip -9 > seed/demo.sql.gz
+```
+
+Перед коммитом вычистить личное: настоящие почты, телефоны, Telegram и
+таблицу `Session`. Репозиторий публичный.
+
+**В проде** `KTTF_DEMO_SEED=0`: демо-аккаунты с известными паролями там не
+нужны.
 
 Схему накатывает контейнер `kttf-migrate`: он отрабатывает `prisma migrate
 deploy` и завершается, API стартует только после него (ADR-030). Отдельного
@@ -31,6 +83,7 @@ deploy` и завершается, API стартует только после 
 | `kttf-postgres` | PostgreSQL 17 | `5433` |
 | `kttf-redis` | кэш и очереди BullMQ | `6380` |
 | `kttf-minio` | файлы: фото игроков, логотипы клубов | `9000`, консоль `9001` |
+| `kttf-seed`, `kttf-seed-media` | разовая заливка демо-данных в пустой стек | — |
 | `kttf-migrate` | разовая миграция схемы, отрабатывает и завершается | — |
 | `kttf-api` | NestJS | внутренний |
 | `kttf-web` | статика React на Caddy | внутренний |

@@ -82,6 +82,48 @@ services:
       retries: 10
       start_period: 10s
 
+  # ---- Демо-данные. Включаются KTTF_DEMO_SEED=1, в проде выключены ----
+  #
+  # На пустой стек ложится снимок локальной базы и файлов из seed/: игроки,
+  # клубы, турниры с рейтингом, форум, каталог. Непустую базу не трогают,
+  # поэтому повторный `up` безопасен.
+
+  kttf-seed:
+    image: postgres:17-alpine
+    container_name: kttf-seed
+    restart: 'no'
+    entrypoint: ['sh', '/seed/seed-db.sh']
+    environment:
+      KTTF_DEMO_SEED: ${KTTF_DEMO_SEED:-0}
+      PGHOST: kttf-postgres
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB}
+    volumes:
+      - ./seed:/seed:ro
+    networks:
+      - kttf-net
+    depends_on:
+      kttf-postgres:
+        condition: service_healthy
+
+  kttf-seed-media:
+    image: cgr.dev/chainguard/minio:latest
+    container_name: kttf-seed-media
+    restart: 'no'
+    entrypoint: ['sh', '/seed/seed-media.sh']
+    environment:
+      KTTF_DEMO_SEED: ${KTTF_DEMO_SEED:-0}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - ./seed:/seed:ro
+    networks:
+      - kttf-net
+    depends_on:
+      kttf-minio:
+        condition: service_healthy
+
   # ---- Приложения ----
 
   # Схему накатывает отдельный разовый контейнер, а не API при старте
@@ -104,6 +146,9 @@ services:
     depends_on:
       kttf-postgres:
         condition: service_healthy
+      # Демо-дамп несёт схему сам, миграция докатывает только новое
+      kttf-seed:
+        condition: service_completed_successfully
 
   kttf-api:
     build:
@@ -145,6 +190,8 @@ services:
         condition: service_healthy
       kttf-minio:
         condition: service_healthy
+      kttf-seed-media:
+        condition: service_completed_successfully
 
   kttf-web:
     build:
