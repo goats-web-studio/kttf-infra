@@ -114,7 +114,9 @@ fi
 
 log "Ночные резервные копии (03:30)"
 cron_line="30 3 * * * $INFRA_DIR/deploy/backup.sh >> $ROOT_DIR/backups/backup.log 2>&1"
-( crontab -u "$DEPLOY_USER" -l 2>/dev/null | grep -vF 'deploy/backup.sh'; echo "$cron_line" ) \
+# На чистом сервере crontab пуст: crontab -l и grep -v без строк вернут 1,
+# а с pipefail это обрывает скрипт. Пустой список — норма, не ошибка.
+{ crontab -u "$DEPLOY_USER" -l 2>/dev/null | grep -vF 'deploy/backup.sh' || true; echo "$cron_line"; } \
   | crontab -u "$DEPLOY_USER" -
 
 if [[ $HARDEN_SSH -eq 1 ]]; then
