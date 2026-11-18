@@ -124,7 +124,11 @@ cron_line="30 3 * * * $INFRA_DIR/deploy/backup.sh >> $ROOT_DIR/backups/backup.lo
 
 if [[ $HARDEN_SSH -eq 1 ]]; then
   log "SSH: только ключи, без root"
-  cat > /etc/ssh/sshd_config.d/90-kttf.conf <<'CONF'
+  # sshd берёт первое значение параметра, а облачный образ кладёт
+  # 50-cloud-init.conf с PasswordAuthentication yes. Наш файл должен
+  # читаться раньше — отсюда 00-.
+  rm -f /etc/ssh/sshd_config.d/90-kttf.conf
+  cat > /etc/ssh/sshd_config.d/00-kttf.conf <<'CONF'
 PasswordAuthentication no
 KbdInteractiveAuthentication no
 PermitRootLogin no
