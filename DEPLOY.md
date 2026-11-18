@@ -59,6 +59,8 @@ curl -fsSL https://raw.githubusercontent.com/goats-web-studio/kttf-infra/main/de
   | sudo bash -s -- --deploy-key "<содержимое kttf_deploy.pub>"
 ```
 
+На только что созданном сервере первые 15–25 минут `unattended-upgrades` ставит обновления безопасности и держит блокировку apt. Скрипт ждёт её до 10 минут; не дождался — запустить ещё раз. После скрипта, если есть `/var/run/reboot-required`, перезагрузить сервер.
+
 Скрипт ставит Docker и Compose, swap, ufw (открыты 22, 80, 443), fail2ban и автообновления безопасности. Ещё он заводит пользователя `deploy`, клонирует репозиторий в `/opt/kttf/kttf-infra`, создаёт `.env` со свежими секретами и ставит ночные копии в cron. Повторный запуск безопасен.
 
 **Сохранить `.env` в менеджер паролей:** `sudo cat /opt/kttf/kttf-infra/.env`.
@@ -93,9 +95,9 @@ done
 
 ### 4. Доступ к образам
 
-После первого прогона CI в организации появятся пакеты `kttf-api`, `kttf-migrate` и `kttf-web`. Репозитории публичные, поэтому проще сделать публичными и пакеты: Packages → пакет → Package settings → Change visibility → Public. Тогда серверу вход в GHCR не нужен.
+Пакеты `kttf-api`, `kttf-migrate` и `kttf-web` приватные. Сервер тянет их токеном: в `.env` сервера `GHCR_USER` (логин владельца токена) и `GHCR_TOKEN` (classic token только с правом `read:packages`). Токен истёк или отозван — выкладка упадёт на `pull`, старая версия продолжит работать.
 
-Если пакеты остаются приватными, в `.env` сервера указать `GHCR_USER` и `GHCR_TOKEN` (classic token с правом `read:packages`).
+Если пакеты сделать публичными (Package settings → Change visibility → Public), токен не нужен.
 
 ### 5. Первая выкладка
 
