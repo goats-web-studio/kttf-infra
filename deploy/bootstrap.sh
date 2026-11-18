@@ -35,6 +35,9 @@ log() { printf '\n==> %s\n' "$*"; }
 
 log "Пакеты"
 export DEBIAN_FRONTEND=noninteractive
+# Свежий сервер в первые минуты сам гоняет unattended-upgrades и держит
+# блокировку dpkg. Ждём её до 10 минут, а не падаем.
+apt-get() { command apt-get -o DPkg::Lock::Timeout=600 "$@"; }
 apt-get update -q
 apt-get install -yq ca-certificates curl git ufw fail2ban unattended-upgrades openssl rsync
 
