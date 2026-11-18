@@ -23,6 +23,8 @@
 	encode gzip zstd
 
 	header {
+		# HSTS — из окружения: в проде год, локально 0 (compose.yaml).
+		Strict-Transport-Security "{$KTTF_HSTS:max-age=0}"
 		X-Content-Type-Options nosniff
 		X-Frame-Options DENY
 		Referrer-Policy strict-origin-when-cross-origin
@@ -42,4 +44,9 @@
 		output stdout
 		format json
 	}
+}
+
+# www — на основной адрес, один канонический домен для ссылок и поиска.
+www.{$KTTF_DOMAIN:localhost} {
+	redir https://{$KTTF_DOMAIN:localhost}{uri} permanent
 }
