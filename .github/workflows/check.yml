@@ -1,0 +1,35 @@
+# Проверка конфигурации стека: compose разбирается, скрипты без ошибок.
+name: Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: compose — локальное окружение
+        run: docker compose --env-file .env.example config --quiet
+
+      - name: compose — продовое окружение
+        run: |
+          sed 's/__GENERATE__/ci_placeholder_secret_0123456789abcdef/' deploy/env.production.example > /tmp/prod.env
+          docker compose --env-file /tmp/prod.env config --quiet
+
+      - name: Caddyfile — прод и локально
+        run: |
+          for env in "KTTF_DOMAIN=kttf.kz KTTF_HSTS=max-age=31536000" "KTTF_DOMAIN=localhost KTTF_HSTS=max-age=0"; do
+            set -- $env
+            docker run --rm -e "$1" -e "$2" -v "$PWD/caddy:/etc/caddy:ro" caddy:2-alpine \
+              caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+          done
+
+      - name: shellcheck
+        run: shellcheck deploy/*.sh

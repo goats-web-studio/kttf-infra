@@ -1,0 +1,83 @@
+# Выкладка KTTF на сервер (DEPLOY.md).
+#
+# Запуск: вручную (Actions → Deploy) или из CI kttf-back и kttf-front после
+# сборки образа. На сервере — deploy/deploy.sh: тянет образы из GHCR,
+# накатывает миграции, проверяет здоровье и откатывается при отказе.
+#
+# Пока сервера нет (не задан секрет DEPLOY_HOST), выкладка пропускается
+# с пометкой, а не падает: CI приложений остаётся зелёным.
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_tag:
+        description: 'Тег kttf-api и kttf-migrate (пусто — без изменений)'
+        required: false
+        default: ''
+      web_tag:
+        description: 'Тег kttf-web (пусто — без изменений)'
+        required: false
+        default: ''
+  workflow_call:
+    inputs:
+      api_tag:
+        type: string
+        required: false
+        default: ''
+      web_tag:
+        type: string
+        required: false
+        default: ''
+
+# Одна выкладка за раз и без отмены начатой: оборванная выкладка хуже очереди.
+concurrency:
+  group: kttf-production-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Сервер подключён?
+        id: ready
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          if [ -z "$DEPLOY_HOST" ]; then
+            echo "::notice title=Выкладка пропущена::Секрет DEPLOY_HOST не задан — сервер ещё не подключён (DEPLOY.md, шаг 3)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Выложить
+        if: steps.ready.outputs.ready == 'true'
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          API_TAG: ${{ inputs.api_tag }}
+          WEB_TAG: ${{ inputs.web_tag }}
+        run: |
+          set -euo pipefail
+          # Тег уходит в команду удалённой оболочки — проверяется до неё.
+          for tag in "$API_TAG" "$WEB_TAG"; do
+            if [ -n "$tag" ] && ! printf '%s' "$tag" | grep -Eq '^[A-Za-z0-9_.-]{1,128}$'; then
+              echo "::error::Недопустимый тег: $tag"; exit 1
+            fi
+          done
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          args=""
+          [ -z "$API_TAG" ] || args="$args --api $API_TAG"
+          [ -z "$WEB_TAG" ] || args="$args --web $WEB_TAG"
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes -o ServerAliveInterval=20 -o ServerAliveCountMax=30 \
+            "${DEPLOY_USER:-deploy}@$DEPLOY_HOST" "/opt/kttf/kttf-infra/deploy/deploy.sh$args"
